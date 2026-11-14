@@ -36,6 +36,9 @@ class AndroidVideoController extends PlatformVideoController {
   NativePlayer get platform => player.platform as NativePlayer;
 
   Future<void> setProperty(String key, String value) async {
+    // A surface update may still be waiting its turn, or be half done, when
+    // the player is disposed: nothing is left to set then.
+    if (platform.disposed) return;
     await platform.setProperty(key, value, waitForInitialization: false);
   }
 
@@ -71,7 +74,14 @@ class AndroidVideoController extends PlatformVideoController {
       // Instead of seeking to the start (Duration.zero), seek to the current playback position
       // without jumping the user to the start of the media.
       final currentPosition = player.state.position;
-      await player.seek(currentPosition);
+      if (platform.disposed) return;
+      try {
+        await player.seek(currentPosition);
+      } on AssertionError {
+        // "[Player] has been disposed": disposed while the seek waited
+        // behind other commands. Anything else is a real failure.
+        if (!platform.disposed) rethrow;
+      }
     });
   }
 
